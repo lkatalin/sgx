@@ -5,8 +5,23 @@
 //! See Section A.4 in the following link for all types in this module:
 //! https://download.01.org/intel-sgx/dcap-1.0/docs/SGX_ECDSA_QuoteGenReference_DCAP_API_Linux_1.0.pdf
 
+use std::{convert::TryFrom, fmt, vec::Vec};
+
 use super::report::Body;
-use std::vec::Vec;
+
+const QUOTE_HEADER_LEN: usize = 48;
+const QUOTE_SIGNATURE_START_BYTE: usize = 436;
+const ISV_ENCLAVE_REPORT_SIG_LEN: usize = 64;
+const ATT_KEY_PUB_LEN: usize = 64;
+const REPORT_DATA_OFFSET: usize = 320;
+const PCK_HASH_LEN: usize = 32;
+const _ECDSA_P256_SIGNATURE_LEN: usize = 64;
+const _ECDSA_P256_PUBLIC_KEY_LEN: usize = 64;
+const _QE3_VENDOR_ID_LEN: usize = 16;
+const _QE3_USER_DATA_LEN: usize = 20;
+const REPORT_BODY_LEN: usize = 384;
+const _CPUSVN_LEN: usize = 16;
+const _QUOTE_VERSION_3: u16 = 3;
 
 /// The Quote version for DCAP is 3. Must be 2 bytes.
 pub const VERSION: u16 = 3;
@@ -18,6 +33,22 @@ pub const ECDSASIGLEN: u32 = 64;
 pub const INTELVID: [u8; 16] = [
     0x93, 0x9A, 0x72, 0x33, 0xF7, 0x9C, 0x4C, 0xA9, 0x94, 0x0A, 0x0D, 0xB3, 0x95, 0x7F, 0x06, 0x07,
 ];
+
+#[derive(Debug, Clone)]
+/// Error type for Quote module
+pub struct QuoteError(String);
+
+impl fmt::Display for QuoteError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", &self.0)
+    }
+}
+
+impl std::error::Error for QuoteError {
+    fn description(&self) -> &str {
+        &self.0
+    }
+}
 
 /// Section A.4, Table 9
 #[repr(u16)]
@@ -96,6 +127,7 @@ pub struct SigData {
 
 /// The type of Attestation Key used to sign the Report.
 #[repr(u16)]
+#[derive(Eq, PartialEq)]
 pub enum AttestationKeyType {
     /// ECDSA-256-with-P-256 curve
     ECDSA256P256 = 2,
@@ -107,6 +139,16 @@ pub enum AttestationKeyType {
 impl Default for AttestationKeyType {
     fn default() -> Self {
         AttestationKeyType::ECDSA256P256
+    }
+}
+
+impl AttestationKeyType {
+    fn from_u16(value: u16) -> AttestationKeyType {
+        match value {
+            2 => AttestationKeyType::ECDSA256P256,
+            3 => AttestationKeyType::ECDSA384P384,
+            _ => panic!("Unknown value: {}", value),
+        }
     }
 }
 
@@ -155,6 +197,49 @@ impl Default for QuoteHeader {
     }
 }
 
+impl TryFrom<[u8; 48]> for QuoteHeader {
+    type Error = QuoteError;
+    
+    fn try_from(bytes: [u8; 48]) -> Result<Self, Self::Error> {
+
+        let mut tmp = [0u8; 2];
+
+        tmp.copy_from_slice(&bytes[0..2]);
+        let version = u16::from_le_bytes(tmp);
+        if version != VERSION {
+            return Err(QuoteError(format!("Incorrect Quote version, expected: {}, actual: {}; cannot convert bytes to QuoteHeader", VERSION, version)));
+        }
+
+        tmp.copy_from_slice(&bytes[2..4]);
+        let att_key_type = AttestationKeyType::from_u16(u16::from_le_bytes(tmp));
+        if att_key_type != AttestationKeyType::default() {
+            return Err(QuoteError(format!("Incorrect Quote key type, expected: {}, actual: {}; cannot convert bytes to QuoteHeader", AttestationKeyType::default() as u16, att_key_type as u16)));
+        }
+
+        tmp.copy_from_slice(&bytes[8..10]);
+        let qe_svn = u16::from_le_bytes(tmp);
+
+        tmp.copy_from_slice(&bytes[10..12]);
+        let pce_svn = u16::from_le_bytes(tmp);
+
+        let mut qe_vendor_id = [0u8; 16];
+        qe_vendor_id.copy_from_slice(&bytes[12..28]);
+
+        let mut user_data = [0u8; 20];
+        user_data.copy_from_slice(&bytes[28..48]);
+
+        Ok(Self {
+            version,
+            att_key_type,
+            reserved: Default::default(),
+            qe_svn,
+            pce_svn,
+            qe_vendor_id,
+            user_data,
+        })
+    }
+}
+
 /// Section A.4
 /// All integer fields are in little endian.
 #[repr(C, align(4))]
@@ -181,6 +266,50 @@ impl Default for Quote {
             sig_data_len: ECDSASIGLEN,
             sig_data: Default::default(),
         }
+    }
+}
+
+impl Quote {
+    /// This vector of the Quote Header and ISV Enclave Report is the material signed
+    /// by the Quoting Enclave's Attestation Key and should be returned in raw form to
+    /// verify the Attestation Key's signature. Specifically, the header's version
+    /// number should also be kept intact in the vector, rather than being abstracted
+    /// into the Header enum.
+    pub fn raw_header_and_body(quote: &[u8]) -> Result<Vec<u8>, QuoteError> {
+        Ok(quote[0..(QUOTE_HEADER_LEN + REPORT_BODY_LEN)].to_vec())
+    }
+
+    /// The Report Data of the QE Report holds a SHA256 hash of (ECDSA Attestation Key || QE
+    /// Authentication data) || 32-0x00's. This hash must be verified for attestation.
+    /// The Report comes after the ISV Enclave Report Signature and Attestation Public Key in the
+    /// Quote Signature. The structure of the QE Report in the Quote Signature is identical
+    /// to the structure of any enclave's Report, so the Report Data begins at byte 320 of the Report.
+    pub fn raw_pck_hash(quote: &[u8]) -> Result<&[u8], QuoteError> {
+        let start_byte = QUOTE_SIGNATURE_START_BYTE
+            + ISV_ENCLAVE_REPORT_SIG_LEN
+            + ATT_KEY_PUB_LEN
+            + REPORT_DATA_OFFSET;
+        Ok(&quote[start_byte.. start_byte + PCK_HASH_LEN])
+    }
+
+    /// Retrieves Quote Header
+    pub fn get_header(self) -> QuoteHeader {
+        self.header
+    }
+
+    /// Retrieves Quote Body
+    pub fn get_body(self) -> Body {
+        self.isv_enclave_report
+    }
+
+    /// Retrieves Quote's sig length
+    pub fn get_siglen(self) -> u32 {
+        self.sig_data_len
+    }
+
+    /// Retrieves Quote's signature data
+    pub fn get_sigdata(self) -> SigData {
+        self.sig_data
     }
 }
 
