@@ -197,10 +197,10 @@ impl Default for QuoteHeader {
     }
 }
 
-impl TryFrom<[u8; 48]> for QuoteHeader {
+impl TryFrom<&[u8; 48]> for QuoteHeader {
     type Error = QuoteError;
     
-    fn try_from(bytes: [u8; 48]) -> Result<Self, Self::Error> {
+    fn try_from(bytes: &[u8; 48]) -> Result<Self, Self::Error> {
 
         let mut tmp = [0u8; 2];
 
