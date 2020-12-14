@@ -7,7 +7,7 @@
 
 use std::{convert::TryFrom, fmt, vec::Vec};
 
-use super::report::Body;
+use super::report::{Body, ReportError};
 
 const QUOTE_HEADER_LEN: usize = 48;
 const QUOTE_SIGNATURE_START_BYTE: usize = 436;
@@ -50,6 +50,12 @@ impl std::error::Error for QuoteError {
     }
 }
 
+impl From<ReportError> for QuoteError {
+    fn from(_: ReportError) -> QuoteError {
+        QuoteError("Report error occurred".to_string())
+    }
+}
+
 /// Section A.4, Table 9
 #[repr(u16)]
 pub enum CertDataType {
@@ -85,6 +91,23 @@ impl Default for CertDataType {
     }
 }
 
+impl TryFrom<u16> for CertDataType {
+    type Error = QuoteError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(CertDataType::PpidPlaintext),
+            2 => Ok(CertDataType::PpidRSA2048OAEP),
+            3 => Ok(CertDataType::PpidRSA3072OAEP),
+            4 => Ok(CertDataType::PCKLeafCert),
+            5 => Ok(CertDataType::PCKCertChain),
+            6 => Ok(CertDataType::Quote),
+            7 => Ok(CertDataType::Manifest),
+            _ => Err(QuoteError("Unknown Cert Data type".to_string()))
+        }
+    }
+}
+
 /// ECDSA  signature, the r component followed by the
 /// s component, 2 x 32 bytes.
 /// A.4, Table 6
@@ -98,8 +121,8 @@ pub struct ECDSAP256Sig {
     pub s: [u8; 32],
 }
 
-impl From<&[u8; 64]> for ECDSAP256Sig {
-    fn from(bytes: &[u8; 64]) -> Self {
+impl From<&[u8]> for ECDSAP256Sig {
+    fn from(bytes: &[u8]) -> Self {
         let mut r = [0u8; 32];
         r.copy_from_slice(&bytes[0..32]);
 
@@ -124,8 +147,8 @@ pub struct ECDSAPubKey {
     pub y: [u8; 32],
 }
 
-impl From<&[u8; 64]> for ECDSAPubKey {
-    fn from(bytes: &[u8; 64]) -> Self {
+impl From<&[u8]> for ECDSAPubKey {
+    fn from(bytes: &[u8]) -> Self {
         let mut x = [0u8; 32];
         x.copy_from_slice(&bytes[0..32]);
 
@@ -144,9 +167,53 @@ pub struct SigData {
     ecdsa_attestation_key: ECDSAPubKey,
     qe_report: Body,
     qe_report_sig: ECDSAP256Sig,
-    qe_auth: Vec<u8>,
+    qe_auth: Vec<u8>, // does this include the size?
     qe_cert_data_type: CertDataType,
-    qe_cert_data: Vec<u8>,
+    qe_cert_data: Vec<u8>, // does this include the size?
+}
+
+impl TryFrom<&[u8]> for SigData {
+    type Error = QuoteError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let isv_encl_rep_sig = ECDSAP256Sig::from(&bytes[0..64]);
+        let ecdsa_att_key = ECDSAPubKey::from(&bytes[64..128]);
+        let qe_rep_body = Body::try_from(&bytes[128..512])?;
+        let qe_rep_sig = ECDSAP256Sig::from(&bytes[512..576]);
+
+        // QE Auth Data length is variable
+        let mut qe_auth_len_bytes = [0u8; 2];
+        qe_auth_len_bytes.copy_from_slice(&bytes[576..578]);
+        let qe_auth_len = u16::from_le_bytes(qe_auth_len_bytes);
+        let mut qe_auth = vec![0u8; qe_auth_len.into()];
+        let qe_auth_data_end_byte = 578 + qe_auth_len;
+        qe_auth.copy_from_slice(&bytes[578..qe_auth_data_end_byte.into()]);
+
+        // Cert Data length is variable
+        let cd_start = qe_auth_data_end_byte;
+        let current = cd_start;
+        let qe_cert_data_type = CertDataType::try_from(u16::from_le_bytes(bytes[cd_start.into()..(cd_start + 2).into()]));
+        
+        // insert check on cert data type
+
+        let current = cd_start + 2;
+        let cert_data_len_bytes = [0u8; 4];
+        cert_data_len_bytes.copy_from_slice(&bytes[current..(current + 4)]);
+        let cert_data_len = u32::from_le_bytes(cert_data_len_bytes);
+        let current = current + 4;
+        let mut qe_cert_data = vec![0u8; cert_data_len.into()];
+        qe_cert_data.copy_from_slice(&bytes[current..(current + cert_data_len)]);
+
+        Ok(Self {
+            isv_encl_rep_sig,
+            ecdsa_att_key,
+            qe_rep_body,
+            qe_rep_sig,
+            qe_auth,
+            qe_cert_data_type,
+            qe_cert_data
+        })
+    }
 }
 
 /// Wrapper struct for the u32 indicating the signature data length

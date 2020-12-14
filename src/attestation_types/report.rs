@@ -62,10 +62,10 @@ pub struct Body {
     pub reportdata: [u16; 32],
 }
 
-impl TryFrom<&[u8; 384]> for Body {
+impl TryFrom<&[u8]> for Body {
     type Error = ReportError;
 
-    fn try_from(bytes: &[u8; 384]) -> Result<Self, Self::Error> {
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         let mut cpusvn = [0u8; 16];
         cpusvn.copy_from_slice(&bytes[0..16]);
 
