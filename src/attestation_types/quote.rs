@@ -98,6 +98,18 @@ pub struct ECDSAP256Sig {
     pub s: [u8; 32],
 }
 
+impl From<&[u8; 64]> for ECDSAP256Sig {
+    fn from(bytes: &[u8; 64]) -> Self {
+        let mut r = [0u8; 32];
+        r.copy_from_slice(&bytes[0..32]);
+
+        let mut s = [0u8; 32];
+        s.copy_from_slice(&bytes[32..64]);
+
+        Self { r, s }
+    }
+}
+
 /// EC KT-I Public Key, the x-coordinate followed by
 /// the y-coordinate (on the RFC 6090P-256 curve),
 /// 2 x 32 bytes.
@@ -110,6 +122,18 @@ pub struct ECDSAPubKey {
 
     /// y coordinate
     pub y: [u8; 32],
+}
+
+impl From<&[u8; 64]> for ECDSAPubKey {
+    fn from(bytes: &[u8; 64]) -> Self {
+        let mut x = [0u8; 32];
+        x.copy_from_slice(&bytes[0..32]);
+
+        let mut y = [0u8; 32];
+        y.copy_from_slice(&bytes[32..64]);
+
+        Self { x, y }
+    }
 }
 
 /// A.4, Table 4
@@ -131,11 +155,13 @@ pub struct SigData {
 pub struct SigDataLen(u32);
 
 impl SigDataLen {
-    fn from_u32(val: u32) -> Self {
+    /// Creates a SigDataLen from a u32.
+    pub fn from_u32(val: u32) -> Self {
         SigDataLen(val)
     }
 
-    fn to_u32(&self) -> u32 {
+    /// Converts a SigDataLen to the u32 value it holds.
+    pub fn to_u32(&self) -> u32 {
         self.0
     }
 }
@@ -157,7 +183,6 @@ impl TryFrom<&[u8; 4]> for SigDataLen {
     }
 }
 
-
 /// The type of Attestation Key used to sign the Report.
 #[repr(u16)]
 #[derive(Eq, PartialEq)]
@@ -176,7 +201,8 @@ impl Default for AttestationKeyType {
 }
 
 impl AttestationKeyType {
-    fn from_u16(value: u16) -> Self {
+    /// Creates an AttestationKeyType from a u16.
+    pub fn from_u16(value: u16) -> Self {
         match value {
             2 => AttestationKeyType::ECDSA256P256,
             3 => AttestationKeyType::ECDSA384P384,
