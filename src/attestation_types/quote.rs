@@ -176,10 +176,10 @@ impl TryFrom<&[u8]> for SigData {
     type Error = QuoteError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let isv_encl_rep_sig = ECDSAP256Sig::from(&bytes[0..64]);
-        let ecdsa_att_key = ECDSAPubKey::from(&bytes[64..128]);
-        let qe_rep_body = Body::try_from(&bytes[128..512])?;
-        let qe_rep_sig = ECDSAP256Sig::from(&bytes[512..576]);
+        let isv_enclave_report_sig = ECDSAP256Sig::from(&bytes[0..64]);
+        let ecdsa_attestation_key = ECDSAPubKey::from(&bytes[64..128]);
+        let qe_report = Body::try_from(&bytes[128..512])?;
+        let qe_report_sig = ECDSAP256Sig::from(&bytes[512..576]);
 
         // QE Auth Data length is variable
         let mut qe_auth_len_bytes = [0u8; 2];
@@ -191,24 +191,25 @@ impl TryFrom<&[u8]> for SigData {
 
         // Cert Data length is variable
         let cd_start = qe_auth_data_end_byte;
-        let current = cd_start;
-        let qe_cert_data_type = CertDataType::try_from(u16::from_le_bytes(bytes[cd_start.into()..(cd_start + 2).into()]));
+        let mut qe_cert_data_type_bytes = [0u8; 2];
+        qe_cert_data_type_bytes.copy_from_slice(&bytes[cd_start.into()..(cd_start + 2).into()]);
+        let qe_cert_data_type = CertDataType::try_from(u16::from_le_bytes(qe_cert_data_type_bytes))?;
         
         // insert check on cert data type
 
         let current = cd_start + 2;
-        let cert_data_len_bytes = [0u8; 4];
-        cert_data_len_bytes.copy_from_slice(&bytes[current..(current + 4)]);
+        let mut cert_data_len_bytes = [0u8; 4];
+        cert_data_len_bytes.copy_from_slice(&bytes[current.into()..(current + 4) as usize]);
         let cert_data_len = u32::from_le_bytes(cert_data_len_bytes);
         let current = current + 4;
-        let mut qe_cert_data = vec![0u8; cert_data_len.into()];
-        qe_cert_data.copy_from_slice(&bytes[current..(current + cert_data_len)]);
+        let mut qe_cert_data = vec![0u8; cert_data_len as usize];
+        qe_cert_data.copy_from_slice(&bytes[current as usize..(current as usize + cert_data_len as usize)]);
 
         Ok(Self {
-            isv_encl_rep_sig,
-            ecdsa_att_key,
-            qe_rep_body,
-            qe_rep_sig,
+            isv_enclave_report_sig,
+            ecdsa_attestation_key,
+            qe_report,
+            qe_report_sig,
             qe_auth,
             qe_cert_data_type,
             qe_cert_data
