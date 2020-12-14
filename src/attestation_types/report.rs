@@ -3,7 +3,11 @@
 //! Section 38.15
 //! The REPORT structure is the output of the EREPORT instruction, and must be 512-Byte aligned.
 
-use crate::types::{attr::{Attributes, Flags, Xfrm}, isv, misc::MiscSelect};
+use crate::types::{
+    attr::{Attributes, Flags, Xfrm},
+    isv,
+    misc::MiscSelect,
+};
 
 use core::convert::TryFrom;
 
@@ -62,7 +66,6 @@ impl TryFrom<&[u8; 384]> for Body {
     type Error = ReportError;
 
     fn try_from(bytes: &[u8; 384]) -> Result<Self, Self::Error> {
-        
         let mut cpusvn = [0u8; 16];
         cpusvn.copy_from_slice(&bytes[0..16]);
 
@@ -76,10 +79,7 @@ impl TryFrom<&[u8; 384]> for Body {
         x.copy_from_slice(&bytes[56..64]);
         let f = u64::from_le_bytes(f);
         let x = u64::from_le_bytes(x);
-        let attributes = Attributes::new(
-            Flags::from_bits(f).unwrap(),
-            Xfrm::from_bits(x).unwrap(),
-        );
+        let attributes = Attributes::new(Flags::from_bits(f).unwrap(), Xfrm::from_bits(x).unwrap());
 
         let mut mrenclave = [0u8; 32];
         mrenclave.copy_from_slice(&bytes[64..96]);
@@ -111,7 +111,7 @@ impl TryFrom<&[u8; 384]> for Body {
             isvprodid,
             isvsvn,
             reserved3: Default::default(),
-            reportdata
+            reportdata,
         })
     }
 }

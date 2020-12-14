@@ -125,6 +125,39 @@ pub struct SigData {
     qe_cert_data: Vec<u8>,
 }
 
+/// Wrapper struct for the u32 indicating the signature data length
+/// (described in A.4).
+#[repr(C)]
+pub struct SigDataLen(u32);
+
+impl SigDataLen {
+    fn from_u32(val: u32) -> Self {
+        SigDataLen(val)
+    }
+
+    fn to_u32(&self) -> u32 {
+        self.0
+    }
+}
+
+impl Default for SigDataLen {
+    fn default() -> Self {
+        SigDataLen(ECDSASIGLEN)
+    }
+}
+
+impl TryFrom<&[u8; 4]> for SigDataLen {
+    type Error = QuoteError;
+
+    fn try_from(bytes: &[u8; 4]) -> Result<Self, Self::Error> {
+        let mut tmp = [0u8; 4];
+        tmp.copy_from_slice(&bytes[0..4]);
+        let len = u32::from_le_bytes(tmp);
+        Ok(SigDataLen::from_u32(len))
+    }
+}
+
+
 /// The type of Attestation Key used to sign the Report.
 #[repr(u16)]
 #[derive(Eq, PartialEq)]
@@ -143,7 +176,7 @@ impl Default for AttestationKeyType {
 }
 
 impl AttestationKeyType {
-    fn from_u16(value: u16) -> AttestationKeyType {
+    fn from_u16(value: u16) -> Self {
         match value {
             2 => AttestationKeyType::ECDSA256P256,
             3 => AttestationKeyType::ECDSA384P384,
@@ -199,9 +232,8 @@ impl Default for QuoteHeader {
 
 impl TryFrom<&[u8; 48]> for QuoteHeader {
     type Error = QuoteError;
-    
-    fn try_from(bytes: &[u8; 48]) -> Result<Self, Self::Error> {
 
+    fn try_from(bytes: &[u8; 48]) -> Result<Self, Self::Error> {
         let mut tmp = [0u8; 2];
 
         tmp.copy_from_slice(&bytes[0..2]);
@@ -242,6 +274,7 @@ impl TryFrom<&[u8; 48]> for QuoteHeader {
 
 /// Section A.4
 /// All integer fields are in little endian.
+#[derive(Default)]
 #[repr(C, align(4))]
 pub struct Quote {
     /// Header for Quote structure; transparent to the user.
@@ -251,22 +284,11 @@ pub struct Quote {
     isv_enclave_report: Body,
 
     /// Size of the Signature Data field.
-    sig_data_len: u32,
+    sig_data_len: SigDataLen,
 
     /// Variable-length data containing the signature and
     /// supporting data.
     sig_data: SigData,
-}
-
-impl Default for Quote {
-    fn default() -> Self {
-        Self {
-            header: Default::default(),
-            isv_enclave_report: Default::default(),
-            sig_data_len: ECDSASIGLEN,
-            sig_data: Default::default(),
-        }
-    }
 }
 
 impl Quote {
@@ -289,7 +311,7 @@ impl Quote {
             + ISV_ENCLAVE_REPORT_SIG_LEN
             + ATT_KEY_PUB_LEN
             + REPORT_DATA_OFFSET;
-        Ok(&quote[start_byte.. start_byte + PCK_HASH_LEN])
+        Ok(&quote[start_byte..start_byte + PCK_HASH_LEN])
     }
 
     /// Retrieves Quote Header
@@ -303,7 +325,7 @@ impl Quote {
     }
 
     /// Retrieves Quote's sig length
-    pub fn get_siglen(self) -> u32 {
+    pub fn get_siglen(self) -> SigDataLen {
         self.sig_data_len
     }
 

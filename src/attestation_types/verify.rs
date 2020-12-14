@@ -11,7 +11,15 @@ use openssl::{
     x509::*,
 };
 //use serde_json::{from_reader, to_writer, Deserializer};
-use std::{borrow::Borrow, convert::TryFrom, env, error::Error, fs, io::{Cursor, Write}, net::TcpStream};
+use std::{
+    borrow::Borrow,
+    convert::TryFrom,
+    env,
+    error::Error,
+    fs,
+    io::{Cursor, Write},
+    net::TcpStream,
+};
 
 const DAEMON_CONN: &'static str = "localhost:1034";
 const ENCL_CONN: &'static str = "localhost:1066";
@@ -31,36 +39,35 @@ const ENCL_CONN: &'static str = "localhost:1066";
 /// https://download.01.org/intel-sgx/dcap-1.0/docs/SGX_ECDSA_QuoteGenReference_DCAP_API_Linux_1.0.pdf
 
 fn verify() -> Result<(), ()> {
-    
     let quote = SAMPLE_QUOTE;
-    
+
     // The tenant's PCK certificate chain must be loaded to verify the Quote's PCK Leaf
     // Certificate. The root certificate in this chain is trusted, since it is provided by the
     // tenant.
-//    let cert_chain_file = env::args()
-//        .nth(1)
-//        .expect("You must supply the path of a valid PCK certificate chain as the first argument.");
-//    let cert_chain_file_contents =
-//        fs::read_to_string(&cert_chain_file[..]).expect("PCK cert chain file path invalid.");
-//
-//    // These arguments are supplied by the tenant. They are the data that will be transmitted to the enclave.
-//    let val1 = env::args()
-//        .nth(2)
-//        .expect("You must supply two integers.")
-//        .parse::<u32>()?;
-//    let val2 = env::args()
-//        .nth(3)
-//        .expect("You must supply two integers.")
-//        .parse::<u32>()?;
+    //    let cert_chain_file = env::args()
+    //        .nth(1)
+    //        .expect("You must supply the path of a valid PCK certificate chain as the first argument.");
+    //    let cert_chain_file_contents =
+    //        fs::read_to_string(&cert_chain_file[..]).expect("PCK cert chain file path invalid.");
+    //
+    //    // These arguments are supplied by the tenant. They are the data that will be transmitted to the enclave.
+    //    let val1 = env::args()
+    //        .nth(2)
+    //        .expect("You must supply two integers.")
+    //        .parse::<u32>()?;
+    //    let val2 = env::args()
+    //        .nth(3)
+    //        .expect("You must supply two integers.")
+    //        .parse::<u32>()?;
 
-//    // The tenant requests attestation from the platform's attestation daemon.
-//    let mut daemon_conn = TcpStream::connect(DAEMON_CONN)?;
-//    to_writer(&mut daemon_conn, &b"Request attestation"[..])?;
-//
-//    // The tenant receives a Quote from the platform's attestation
-//    // daemon. This Quote verifies the enclave's self-measurement from its Report.
-//    let quote: Vec<u8> = from_reader(&mut daemon_conn)?;
-//    println!("CLIENT < SERVER: Quote (Attestation)");
+    //    // The tenant requests attestation from the platform's attestation daemon.
+    //    let mut daemon_conn = TcpStream::connect(DAEMON_CONN)?;
+    //    to_writer(&mut daemon_conn, &b"Request attestation"[..])?;
+    //
+    //    // The tenant receives a Quote from the platform's attestation
+    //    // daemon. This Quote verifies the enclave's self-measurement from its Report.
+    //    let quote: Vec<u8> = from_reader(&mut daemon_conn)?;
+    //    println!("CLIENT < SERVER: Quote (Attestation)");
 
     // The signed material for the Quoting Enclave's Attestation Key (Quote Header ||
     // ISV Enclave Report) is retrieved.
@@ -84,17 +91,17 @@ fn verify() -> Result<(), ()> {
     let cert_data = q_sig.certification_data::<Qe3CertDataPckCertChain>()?;
     let quote_pck_leaf_cert = cert_data.leaf_cert;
 
-//    // The PCK chain is reconstructed with the Quote's leaf cert added to end of tenant's chain.
-//    let cert_chain = cert_chain::CertChain::new_from_chain(
-//        X509::stack_from_pem(cert_chain_file_contents.as_bytes())?,
-//        &quote_pck_leaf_cert,
-//    );
-//    cert_chain.len_ok()?;
-//
-//    // The PCK certificate chain's issuers and signatures are verified.
-//    cert_chain.verify_issuers()?;
-//    cert_chain.verify_sigs()?;
-//    println!("CLIENT: 	 PCK cert chain OK");
+    //    // The PCK chain is reconstructed with the Quote's leaf cert added to end of tenant's chain.
+    //    let cert_chain = cert_chain::CertChain::new_from_chain(
+    //        X509::stack_from_pem(cert_chain_file_contents.as_bytes())?,
+    //        &quote_pck_leaf_cert,
+    //    );
+    //    cert_chain.len_ok()?;
+    //
+    //    // The PCK certificate chain's issuers and signatures are verified.
+    //    cert_chain.verify_issuers()?;
+    //    cert_chain.verify_sigs()?;
+    //    println!("CLIENT: 	 PCK cert chain OK");
 
     // The Attestation Key's signature on the Quote is verified.
     let attestation_key = key::Key::new_from_xy(&q_att_key_pub)?;
@@ -173,39 +180,39 @@ fn verify() -> Result<(), ()> {
 
     // The tenant sends its pub key and encrypted data to the enclave, along with the ivs, tags, and additional
     // data for the ciphertext.
-//    let mut encl_conn = TcpStream::connect(ENCL_CONN)?;
-//    to_writer(&mut encl_conn, &tenant_pubkey_bytes)?;
-//    to_writer(&mut encl_conn, &hash_of_val1)?;
-//    to_writer(&mut encl_conn, &hash_of_val2)?;
-//    to_writer(&mut encl_conn, &iv1)?;
-//    to_writer(&mut encl_conn, &iv2)?;
-//    to_writer(&mut encl_conn, &tag1)?;
-//    to_writer(&mut encl_conn, &tag2)?;
-//    to_writer(&mut encl_conn, &ciphertext1)?;
-//    to_writer(&mut encl_conn, &ciphertext2)?;
-//    println!("CLIENT > SERVER: Tenant PubKey and Encrypted Data");
-//
-//    // The tenant receives the tag, iv, additional data, and encrypted sum from the enclave.
-//    let deserializer = Deserializer::from_reader(&mut encl_conn);
-//    let mut iterator = deserializer.into_iter::<Vec<u8>>();
-//    let tag = iterator.next().unwrap()?;
-//    let iv = iterator.next().unwrap()?;
-//    let ad = iterator.next().unwrap()?;
-//    let ciphersum = iterator.next().unwrap()?;
-//
-//    // The sum is decrypted and converted back to a u32.
-//    let sum = decrypt_aead(
-//        Cipher::aes_256_gcm(),
-//        &symm_key,
-//        Some(&iv),
-//        &ad,
-//        &ciphersum,
-//        &tag,
-//    )?;
-//    let mut reader = Cursor::new(sum);
-//    let sum = reader.read_u32::<NativeEndian>()?;
-//
-//    println!("\n{:?}", sum);
+    //    let mut encl_conn = TcpStream::connect(ENCL_CONN)?;
+    //    to_writer(&mut encl_conn, &tenant_pubkey_bytes)?;
+    //    to_writer(&mut encl_conn, &hash_of_val1)?;
+    //    to_writer(&mut encl_conn, &hash_of_val2)?;
+    //    to_writer(&mut encl_conn, &iv1)?;
+    //    to_writer(&mut encl_conn, &iv2)?;
+    //    to_writer(&mut encl_conn, &tag1)?;
+    //    to_writer(&mut encl_conn, &tag2)?;
+    //    to_writer(&mut encl_conn, &ciphertext1)?;
+    //    to_writer(&mut encl_conn, &ciphertext2)?;
+    //    println!("CLIENT > SERVER: Tenant PubKey and Encrypted Data");
+    //
+    //    // The tenant receives the tag, iv, additional data, and encrypted sum from the enclave.
+    //    let deserializer = Deserializer::from_reader(&mut encl_conn);
+    //    let mut iterator = deserializer.into_iter::<Vec<u8>>();
+    //    let tag = iterator.next().unwrap()?;
+    //    let iv = iterator.next().unwrap()?;
+    //    let ad = iterator.next().unwrap()?;
+    //    let ciphersum = iterator.next().unwrap()?;
+    //
+    //    // The sum is decrypted and converted back to a u32.
+    //    let sum = decrypt_aead(
+    //        Cipher::aes_256_gcm(),
+    //        &symm_key,
+    //        Some(&iv),
+    //        &ad,
+    //        &ciphersum,
+    //        &tag,
+    //    )?;
+    //    let mut reader = Cursor::new(sum);
+    //    let sum = reader.read_u32::<NativeEndian>()?;
+    //
+    //    println!("\n{:?}", sum);
 
     Ok(())
 }
