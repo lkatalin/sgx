@@ -20,7 +20,7 @@ pub struct ReportError;
 
 /// This struct is separated out from the Report to be usable by the Quote struct.
 /// Table 38-21
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(C)]
 pub struct Body {

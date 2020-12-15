@@ -57,6 +57,7 @@ impl From<ReportError> for QuoteError {
 }
 
 /// Section A.4, Table 9
+#[derive(Debug, Clone, Copy)]
 #[repr(u16)]
 pub enum CertDataType {
     /// Byte array that contains concatenation of PPID, CPUSVN,
@@ -111,7 +112,7 @@ impl TryFrom<u16> for CertDataType {
 /// ECDSA  signature, the r component followed by the
 /// s component, 2 x 32 bytes.
 /// A.4, Table 6
-#[derive(Default)]
+#[derive(Default, Debug, Clone, Copy)]
 #[repr(C)]
 pub struct ECDSAP256Sig {
     /// r component
@@ -137,7 +138,7 @@ impl From<&[u8]> for ECDSAP256Sig {
 /// the y-coordinate (on the RFC 6090P-256 curve),
 /// 2 x 32 bytes.
 /// A.4, Table 7
-#[derive(Default)]
+#[derive(Default, Debug, Clone, Copy)]
 #[repr(C)]
 pub struct ECDSAPubKey {
     /// x coordinate
@@ -160,7 +161,7 @@ impl From<&[u8]> for ECDSAPubKey {
 }
 
 /// A.4, Table 4
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 #[repr(C)]
 pub struct SigData {
     isv_enclave_report_sig: ECDSAP256Sig,
@@ -217,8 +218,46 @@ impl TryFrom<&[u8]> for SigData {
     }
 }
 
+impl SigData {
+    /// Retrieve Report Signature
+    pub fn get_report_sig(&self) -> ECDSAP256Sig {
+        self.isv_enclave_report_sig
+    }
+
+    /// Retrieve Attestation Key used to sign Report
+    pub fn get_attkey(&self) -> ECDSAPubKey {
+        self.ecdsa_attestation_key
+    }
+
+    /// Retrieve QE Report of the QE that signed the Report
+    pub fn get_qe_report(&self) -> Body {
+        self.qe_report
+    }
+    
+    /// Retrieve the QE Report Signature
+    pub fn get_qe_report_sig(&self) -> ECDSAP256Sig {
+        self.qe_report_sig
+    }
+    
+    /// Retrieve the QE Auth
+    pub fn get_qe_auth(&self) -> &Vec<u8> {
+        &self.qe_auth
+    }
+    
+    /// Retrieve the QE Cert Data type
+    pub fn get_qe_cert_data_type(&self) -> CertDataType {
+        self.qe_cert_data_type
+    }
+    
+    /// Retrieve the QE Cert Data
+    pub fn get_qe_cert_data(&self) -> &Vec<u8> {
+        &self.qe_cert_data
+    }
+}
+
 /// Wrapper struct for the u32 indicating the signature data length
 /// (described in A.4).
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct SigDataLen(u32);
 
@@ -253,7 +292,7 @@ impl TryFrom<&[u8; 4]> for SigDataLen {
 
 /// The type of Attestation Key used to sign the Report.
 #[repr(u16)]
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum AttestationKeyType {
     /// ECDSA-256-with-P-256 curve
     ECDSA256P256 = 2,
@@ -282,6 +321,7 @@ impl AttestationKeyType {
 /// Unlike the other parts of the Quote, this structure
 /// is transparent to the user.
 /// Section A.4, Table 3
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct QuoteHeader {
     /// Version of Quote structure, 3 in the ECDSA case.
@@ -324,10 +364,10 @@ impl Default for QuoteHeader {
     }
 }
 
-impl TryFrom<&[u8; 48]> for QuoteHeader {
+impl TryFrom<&[u8]> for QuoteHeader {
     type Error = QuoteError;
 
-    fn try_from(bytes: &[u8; 48]) -> Result<Self, Self::Error> {
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         let mut tmp = [0u8; 2];
 
         tmp.copy_from_slice(&bytes[0..2]);
@@ -368,7 +408,7 @@ impl TryFrom<&[u8; 48]> for QuoteHeader {
 
 /// Section A.4
 /// All integer fields are in little endian.
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[repr(C, align(4))]
 pub struct Quote {
     /// Header for Quote structure; transparent to the user.
@@ -409,23 +449,39 @@ impl Quote {
     }
 
     /// Retrieves Quote Header
-    pub fn get_header(self) -> QuoteHeader {
+    pub fn get_header(&self) -> QuoteHeader {
         self.header
     }
 
     /// Retrieves Quote Body
-    pub fn get_body(self) -> Body {
+    pub fn get_body(&self) -> Body {
         self.isv_enclave_report
     }
 
     /// Retrieves Quote's sig length
-    pub fn get_siglen(self) -> SigDataLen {
+    pub fn get_siglen(&self) -> SigDataLen {
         self.sig_data_len
     }
 
     /// Retrieves Quote's signature data
-    pub fn get_sigdata(self) -> SigData {
-        self.sig_data
+    pub fn get_sigdata(&self) -> &SigData {
+        &self.sig_data
+    }
+}
+
+impl TryFrom<&[u8]> for Quote {
+    type Error = QuoteError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let mut sig_data_len_bytes = [08; 4];
+        sig_data_len_bytes.copy_from_slice(&bytes[432..436]);
+
+        Ok(Self {
+            header: QuoteHeader::try_from(&bytes[0..48])?,
+            isv_enclave_report: Body::try_from(&bytes[48..432])?,
+            sig_data_len: SigDataLen::from_u32(u32::from_le_bytes(sig_data_len_bytes)),
+            sig_data: SigData::try_from(&bytes[436..])?,
+        })
     }
 }
 
