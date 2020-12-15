@@ -1,5 +1,4 @@
-use super::sample_quote::SAMPLE_QUOTE;
-use crate::attestation_types::{key::Key, quote::{Quote, QuoteError}, sig::Signature};
+use super::{sample_quote::SAMPLE_QUOTE, key::Key, quote::{Quote, QuoteError}, sig::Signature};
 
 //use byteorder::{ByteOrder, NativeEndian, ReadBytesExt};
 //use dcap_ql::quote::{Qe3CertDataPckCertChain, Quote3SignatureEcdsaP256};
@@ -37,7 +36,7 @@ const ENCL_CONN: &'static str = "localhost:1066";
 /// For more informtation on Intel's Attestation Key and the Quote, you may refer to:
 /// https://download.01.org/intel-sgx/dcap-1.0/docs/SGX_ECDSA_QuoteGenReference_DCAP_API_Linux_1.0.pdf
 
-fn verify() -> Result<(), QuoteError> {
+fn verify() -> Result<u32, QuoteError> {
     let quote_bytes = SAMPLE_QUOTE;
 
     // The tenant's PCK certificate chain must be loaded to verify the Quote's PCK Leaf
@@ -86,6 +85,8 @@ fn verify() -> Result<(), QuoteError> {
     let q_att_key_pub = q_sig.get_attkey();
     let q_auth_data = q_sig.get_qe_auth();
     let q_cert_type = q_sig.get_qe_cert_data_type();
+    println!("Cert data type: {:?}", q_cert_type);
+    assert_eq!(0, 1);
 
     // The Quote's Certification Data contains the PCK Cert Chain and PCK Certificate;
     // the embedded PCK signs the Attestation Key.
@@ -130,15 +131,11 @@ fn verify() -> Result<(), QuoteError> {
 //
 //    println!("\nCLIENT: 	 Attestation Complete");
 
-    Ok(())
+    Ok(5)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn verifying() {
-        verify();
-    }
+#[test]
+fn verifying() {
+    let x = verify().unwrap();
+    assert_eq!(6, x);
 }
