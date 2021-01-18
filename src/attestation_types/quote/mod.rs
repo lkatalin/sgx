@@ -199,6 +199,32 @@ impl Quote {
         Ok(&quote[QE_REPORTDATA_START..QE_REPORTDATA_START + PCK_HASH_LEN])
     }
 
+    /// Gets QE Report Body from SigData section
+    // TODO: Replace this method with a to_vec() on report::Body
+    pub fn raw_qe_report_body(quote: &[u8]) -> Result<&[u8], QuoteError> {
+        // Check Quote length
+        let mut sig_data_len_bytes = [0u8; QUOTE_SIG_DATA_LEN_LEN];
+        if quote.len() < 436 {
+            return Err(QuoteError(
+                "Insufficient Quote length; no sig data len specified".to_string(),
+            ));
+        }
+        sig_data_len_bytes.copy_from_slice(&quote[432..436]);
+        let sd_len = u32::from_le_bytes(sig_data_len_bytes);
+
+        let expected_quote_len = QUOTE_SIG_START + sd_len as usize;
+
+        if quote.len() < expected_quote_len {
+            return Err(QuoteError(
+                "Insufficient Quote length; cannot convert from byte slice".to_string(),
+            ));
+        }
+
+        let sigdata = &quote[QUOTE_SIG_START..expected_quote_len];
+
+        Ok(&sigdata[128..512])
+    }
+
     /// Retrieves Quote Header
     pub fn header(&self) -> &QuoteHeader {
         &self.header
