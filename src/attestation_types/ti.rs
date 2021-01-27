@@ -25,6 +25,15 @@ pub struct TargetInfo {
 /// Pass information from the source enclave to the target enclave
 pub struct ReportData(pub [u8; 64]);
 
+impl Into<[u16; 32]> for ReportData {
+    fn into(self) -> [u16; 32] {
+        let mut repdata = [0u16; 32];
+        let (_, rd, _) = unsafe { self.0.align_to::<u16>() };
+        repdata.copy_from_slice(rd);
+        repdata
+    }
+}
+
 #[cfg(feature = "asm")]
 impl TargetInfo {
     /// Generate a report to the specified target with the included data.
