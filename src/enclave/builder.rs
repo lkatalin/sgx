@@ -146,7 +146,7 @@ impl Builder {
     /// `EINIT` instruction.
     ///
     /// TODO add more comprehensive docs.
-    pub fn build(mut self) -> Result<Arc<RwLock<Enclave>>> {
+    pub fn build(mut self) -> Result<(Arc<RwLock<Enclave>>, [u8; 32])> {
         // Generate a signing key.
         let exp = bn::BigNum::from_u32(3u32)?;
         let key = rsa::Rsa::generate_with_e(3072, &exp)?;
@@ -180,6 +180,9 @@ impl Builder {
             //eprintln!("{:016x}-{:016x} {:?}", line.start, line.end, si);
         }
 
-        Ok(Arc::new(RwLock::new(Enclave::new(self.mmap, self.tcsp))))
+        Ok((
+            Arc::new(RwLock::new(Enclave::new(self.mmap, self.tcsp))),
+            sig.measurement().mrenclave(),
+        ))
     }
 }
