@@ -182,4 +182,16 @@ impl Builder {
 
         Ok(Arc::new(RwLock::new(Enclave::new(self.mmap, self.tcsp))))
     }
+
+    /// Returns mrenclave of the SGX enclave. This does not issue the `EINIT` instruction.
+    pub fn measure(self) -> Result<[u8; 32]> {
+        // Generate a signing key.
+        let exp = bn::BigNum::from_u32(3u32)?;
+        let key = rsa::Rsa::generate_with_e(3072, &exp)?;
+
+        // Create the enclave signature
+        let vendor = Author::new(0, 0);
+        let sig = self.hash.finish(self.sign).sign(vendor, key)?;
+        Ok(sig.measurement().mrenclave())
+    }
 }
